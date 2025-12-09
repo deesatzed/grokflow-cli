@@ -15,6 +15,12 @@ setup(
     long_description_content_type="text/markdown",
     url="https://github.com/deesatzed/grokflow-cli",
     packages=find_packages(),
+    py_modules=[
+        "grokflow",
+        "grokflow_v2",
+        "grokflow_constraints",
+        "grokflow_constraint_cli",
+    ],
     classifiers=[
         "Development Status :: 4 - Beta",
         "Intended Audience :: Developers",
