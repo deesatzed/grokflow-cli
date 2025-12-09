@@ -168,8 +168,8 @@ class GrokFlowV2:
     """Professional SWE-focused CLI"""
     
     # Model configuration for dual-model architecture
-    PLANNER_MODEL = "grok-beta"  # For analysis and planning (high quality reasoning)
-    EXECUTOR_MODEL = "grok-4-fast"  # For fast code execution (optimized for speed and cost)
+    PLANNER_MODEL = "grok-4-1-fast"  # For analysis and planning (updated 2025-12)
+    EXECUTOR_MODEL = "grok-4-1-fast"  # For fast code execution (updated 2025-12)
     
     def __init__(self):
         logger.info("Initializing GrokFlow v2")
