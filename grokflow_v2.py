@@ -45,12 +45,15 @@ from grokflow.exceptions import (
 )
 from grokflow.validators import InputValidator, PathSanitizer
 
-# Import Universal Knowledge System (GUKS) with graceful fallback
+# Import GUKS (GrokFlow Universal Knowledge System) with graceful fallback
 try:
-    from universal_knowledge import UniversalKnowledgeBase
+    from grokflow.guks import EnhancedGUKS, GUKSAnalytics
+    GUKS_AVAILABLE = True
 except ImportError:
-    # Dependencies not installed (sentence-transformers, numpy)
-    UniversalKnowledgeBase = None
+    # Dependencies not installed (sentence-transformers, faiss-cpu)
+    EnhancedGUKS = None
+    GUKSAnalytics = None
+    GUKS_AVAILABLE = False
 
 # Import UndoManager for proper undo/redo with command pattern
 from grokflow.undo_manager import get_undo_manager, FileWriteCommand
@@ -202,25 +205,31 @@ class GrokFlowV2:
         
         self.session = self.load_session()
 
-        # Initialize universal knowledge system if available
-        self.knowledge = None
-        if UniversalKnowledgeBase is not None:
+        # Initialize GUKS (GrokFlow Universal Knowledge System)
+        self.guks = None
+        self.guks_analytics = None
+        if GUKS_AVAILABLE:
             try:
-                self.knowledge = UniversalKnowledgeBase()
-                logger.info("Universal knowledge base initialized")
+                self.guks = EnhancedGUKS()
+                logger.info(f"GUKS initialized with {len(self.guks.patterns)} patterns")
+
+                # Initialize analytics engine
+                self.guks_analytics = GUKSAnalytics(self.guks.patterns)
+                logger.info("GUKS Analytics initialized")
+
+                console.print(f"[dim]✨ GUKS loaded: {len(self.guks.patterns)} patterns from {len(set(p.get('project', '') for p in self.guks.patterns))} projects[/dim]")
             except ImportError as e:
-                logger.info(f"Universal knowledge dependencies not installed: {e}")
-                console.print("[dim]Universal knowledge system not available[/dim]")
+                logger.info(f"GUKS dependencies not installed: {e}")
+                console.print("[dim]GUKS not available (install: pip install sentence-transformers faiss-cpu)[/dim]")
             except PermissionError as e:
-                logger.error(f"Permission denied initializing knowledge base: {e}")
-                console.print("[yellow]⚠ Cannot access knowledge base[/yellow]")
+                logger.error(f"Permission denied initializing GUKS: {e}")
+                console.print("[yellow]⚠ Cannot access GUKS data directory[/yellow]")
             except Exception as e:
-                logger.error(f"Failed to initialize knowledge base: {e}", exc_info=True)
-                console.print(f"[yellow]⚠ Universal knowledge disabled: {e}[/yellow]")
-        # Track last error id recorded in knowledge base for solution logging
-        self.last_error_id: Optional[str] = None
-        # Track last solution id for undo integration with GUKS
-        self.last_solution_id: Optional[str] = None
+                logger.error(f"Failed to initialize GUKS: {e}", exc_info=True)
+                console.print(f"[yellow]⚠ GUKS disabled: {e}[/yellow]")
+
+        # Track last GUKS query for recording fixes
+        self.last_guks_query: Optional[Dict] = None
 
         # Undo system: use proper UndoManager with command pattern
         self.undo_manager = get_undo_manager(max_history=100, force_new=False)
@@ -255,7 +264,7 @@ class GrokFlowV2:
         """Setup enhanced prompt session with completion and history"""
         # Command completer
         commands = WordCompleter(
-            ['fix', 'test', 'commit', 'status', 'context', 'add', 'new', 'templates', 'image', 'knowledge', 'undo', 'redo', 'history', 'reasoning', 'reasoning on', 'reasoning off', 'perf', 'exit', 'help'],
+            ['fix', 'test', 'commit', 'status', 'context', 'add', 'new', 'templates', 'image', 'guks', 'guks stats', 'guks patterns', 'guks recurring', 'guks report', 'knowledge', 'undo', 'redo', 'history', 'reasoning', 'reasoning on', 'reasoning off', 'perf', 'exit', 'help'],
             ignore_case=True,
             sentence=True
         )
@@ -612,7 +621,7 @@ if (require.main === module) {
 ## Examples
 
 ''',
-            'readme': '''# {project_name}
+            'readme': r'''# {project_name}
 
 {description}
 
@@ -623,15 +632,15 @@ if (require.main === module) {
 
 ## Installation
 
-\`\`\`bash
+```bash
 # Installation steps
-\`\`\`
+```
 
 ## Usage
 
-\`\`\`bash
+```bash
 # Usage examples
-\`\`\`
+```
 
 ## License
 
@@ -984,8 +993,8 @@ Provide actionable insights."""
                 console.print("[yellow]Nothing to fix. Specify a file or run code first.[/yellow]")
                 return
 
-        # Surface similar past issues from universal knowledge, if available
-        self._show_knowledge_suggestions()
+        # Surface similar past issues from GUKS, if available
+        self._show_guks_suggestions(file_path, original_code)
 
         # Phase 1: Use planner model for analysis and creating fix plan
         console.print(f"[cyan]🧠 {self.PLANNER_MODEL} is analyzing...[/cyan]\n")
@@ -1158,22 +1167,18 @@ Generate the complete corrected code following the plan above."""
         code_after = new_code if new_code is not None else assistant_text
 
         if Confirm.ask("\n[cyan]After re-running tests, did this fix fully resolve the issue?[/cyan]", default=False):
-            self._record_solution_in_knowledge(
-                description="Grok-4 suggested fix",
-                code_before=code_before,
-                code_after=code_after,
-                time_spent=duration,
-                success=True,
+            # Record in GUKS
+            self._record_fix_in_guks(
+                error=self.workspace.last_error or "Unknown error",
+                fix=f"Applied AI fix: {code_after[:200]}",
+                file_path=file_path,
+                success=True
             )
+            console.print("[dim]✅ Fix recorded in GUKS for future reference[/dim]")
         else:
             if Confirm.ask("[cyan]Did the suggested fix fail to resolve the issue?[/cyan]", default=False):
-                self._record_solution_in_knowledge(
-                    description="Grok-4 suggested fix",
-                    code_before=code_before,
-                    code_after=code_after,
-                    time_spent=duration,
-                    success=False,
-                )
+                # Don't record failed fixes in GUKS (they would pollute the knowledge base)
+                console.print("[dim]Fix not recorded in GUKS (unsuccessful)[/dim]")
     
     def quick_test(self, target: Optional[str] = None):
         """
@@ -1330,6 +1335,131 @@ Generate the complete corrected code following the plan above."""
                 return first, rest.strip()
 
         return "TestFailure", text
+
+    def _show_guks_suggestions(self, file_path: Optional[Path], code: Optional[str]):
+        """Show similar patterns from GUKS based on error or code"""
+        if not self.guks:
+            return
+
+        console.print("[cyan]📚 Querying GUKS...[/cyan]")
+
+        # Build query from available context
+        error_msg = None
+        if self.workspace.last_error:
+            # Extract last few lines of error
+            error_lines = self.workspace.last_error.splitlines()
+            error_msg = '\n'.join(error_lines[-5:])  # Last 5 lines
+
+        code_snippet = None
+        if code:
+            # Extract key parts of code (imports, class defs, function defs)
+            code_lines = code.splitlines()
+            key_lines = [l for l in code_lines if any(kw in l for kw in ['import ', 'class ', 'def ', 'async def'])]
+            code_snippet = '\n'.join(key_lines[:10]) if key_lines else code[:500]
+
+        # Build context
+        context = {}
+        if file_path:
+            context['file_type'] = file_path.suffix.lstrip('.')
+            context['project'] = self.workspace.git_root.name if self.workspace.git_root else Path.cwd().name
+
+        # Query GUKS
+        query_text = f"{error_msg or ''}\n{code_snippet or ''}".strip()
+        if not query_text:
+            console.print("[blue]No context available for GUKS query[/blue]\n")
+            return
+
+        try:
+            results = self.guks.query(
+                code=code_snippet or "",
+                error=error_msg,
+                context=context
+            )
+
+            # Store query for later recording
+            self.last_guks_query = {
+                'code': code_snippet,
+                'error': error_msg,
+                'context': context,
+                'timestamp': datetime.now().isoformat()
+            }
+
+            if not results:
+                console.print("[blue]No similar patterns found in GUKS[/blue]\n")
+                return
+
+            # Display results
+            table = Table(title="Similar Patterns from GUKS", box=box.SIMPLE)
+            table.add_column("#", style="cyan", width=3)
+            table.add_column("Similarity", style="magenta", width=10)
+            table.add_column("Error", style="white", no_wrap=False)
+            table.add_column("Fix", style="green", no_wrap=False)
+            table.add_column("Project", style="dim", width=15)
+
+            for idx, match in enumerate(results[:5], 1):
+                similarity = match.get('similarity', match.get('score', 0))
+                error = match.get('error', '')[:60]
+                fix = match.get('fix', '')[:60]
+                project = match.get('project', 'unknown')[:14]
+
+                table.add_row(
+                    str(idx),
+                    f"{similarity*100:.0f}%",
+                    error + ("..." if len(match.get('error', '')) > 60 else ""),
+                    fix + ("..." if len(match.get('fix', '')) > 60 else ""),
+                    project
+                )
+
+            console.print("\n[cyan]🔍 GUKS found similar patterns:[/cyan]")
+            console.print(table)
+            console.print()
+
+            # Show top match details
+            top_match = results[0]
+            if top_match.get('similarity', top_match.get('score', 0)) > 0.7:
+                console.print(f"[green]💡 Top suggestion ({top_match.get('similarity', top_match.get('score', 0))*100:.0f}% match):[/green]")
+                console.print(f"[dim]Error:[/dim] {top_match['error']}")
+                console.print(f"[dim]Fix:[/dim] {top_match['fix']}")
+                console.print()
+
+        except Exception as e:
+            logger.error(f"GUKS query failed: {e}", exc_info=True)
+            console.print(f"[yellow]⚠ GUKS query failed: {e}[/yellow]\n")
+
+    def _record_fix_in_guks(
+        self,
+        error: str,
+        fix: str,
+        file_path: Optional[Path],
+        success: bool = True
+    ):
+        """Record a successful fix in GUKS"""
+        if not self.guks or not success:
+            return
+
+        # Build pattern dict
+        project = self.workspace.git_root.name if self.workspace.git_root else Path.cwd().name
+        file_name = file_path.name if file_path else "unknown"
+
+        pattern = {
+            'error': error[:500],  # Limit length
+            'fix': fix[:500],
+            'file': file_name,
+            'project': project,
+            'context': self.last_guks_query.get('context', {}) if self.last_guks_query else {}
+        }
+
+        try:
+            # Record in GUKS
+            self.guks.record_fix(pattern)
+            logger.info(f"Recorded fix in GUKS: {file_name}")
+
+            # Reinitialize analytics with updated patterns
+            self.guks_analytics = GUKSAnalytics(self.guks.patterns)
+
+        except Exception as e:
+            logger.error(f"Failed to record fix in GUKS: {e}", exc_info=True)
+            console.print(f"[yellow]⚠ Failed to record in GUKS: {e}[/yellow]")
 
     def _record_error_in_knowledge(self, raw_output: str):
         """Record failing test output as an error in the universal knowledge base."""
@@ -1806,6 +1936,120 @@ Generate the complete corrected code following the plan above."""
         else:
             console.print(f"\n[dim]Architecture: Single model ({self.PLANNER_MODEL})[/dim]")
     
+    def show_guks(self, subcommand: str):
+        """Display GUKS stats, patterns, or analytics"""
+        if not self.guks or not self.guks_analytics:
+            console.print("[yellow]GUKS is not available (install: pip install sentence-transformers faiss-cpu)[/yellow]")
+            return
+
+        parts = (subcommand or '').split()
+        action = parts[0] if parts else 'stats'
+
+        if action == 'stats':
+            # Show GUKS statistics
+            insights = self.guks_analytics.get_team_insights()
+
+            table = Table(title="GUKS Statistics", box=box.ROUNDED)
+            table.add_column("Metric", style="cyan")
+            table.add_column("Value", style="green")
+
+            table.add_row("Total Patterns", str(insights['total_patterns']))
+            table.add_row("Recent Patterns (30d)", str(insights['recent_patterns']))
+            table.add_row("Trend", insights['trend'].title())
+            table.add_row("Recurring Bugs Detected", str(insights['recurring_bugs']))
+            table.add_row("Constraint Rules Suggested", str(insights['constraint_rules_suggested']))
+
+            console.print(table)
+
+            # Category distribution
+            if insights['category_distribution']:
+                console.print("\n[cyan]Category Distribution:[/cyan]")
+                for cat, count in sorted(insights['category_distribution'].items(), key=lambda x: x[1], reverse=True):
+                    console.print(f"  • {cat.replace('_', ' ').title()}: {count}")
+
+            # Hotspots
+            if insights['file_hotspots']:
+                console.print("\n[cyan]File Hotspots:[/cyan]")
+                for file, count in insights['file_hotspots'][:5]:
+                    console.print(f"  • {file}: {count} issues")
+
+        elif action == 'patterns' or action == 'recurring':
+            # Show recurring bugs
+            recurring = self.guks_analytics.detect_recurring_bugs(min_count=2)
+
+            if not recurring:
+                console.print("[blue]No recurring patterns detected yet (need at least 2 occurrences)[/blue]")
+                return
+
+            table = Table(title="Recurring Bug Patterns", box=box.ROUNDED)
+            table.add_column("Pattern", style="white", no_wrap=False)
+            table.add_column("Count", style="magenta", justify="right")
+            table.add_column("Projects", style="cyan", justify="right")
+            table.add_column("Urgency", style="yellow")
+            table.add_column("Suggested Action", style="green", no_wrap=False)
+
+            for bug in recurring[:10]:
+                table.add_row(
+                    bug['pattern'][:60] + ("..." if len(bug['pattern']) > 60 else ""),
+                    str(bug['count']),
+                    str(len(bug['projects'])),
+                    bug['urgency'],
+                    bug['suggested_action'][:50] + ("..." if len(bug['suggested_action']) > 50 else "")
+                )
+
+            console.print(table)
+
+            # Show recommendations
+            if recurring:
+                console.print("\n[yellow]💡 Top Recommendations:[/yellow]")
+                for i, bug in enumerate(recurring[:3], 1):
+                    console.print(f"  {i}. [{bug['urgency']}] {bug['suggested_action']}")
+
+        elif action == 'constraints':
+            # Show suggested constraint rules
+            constraints = self.guks_analytics.suggest_constraint_rules()
+
+            if not constraints:
+                console.print("[blue]No constraint rules suggested yet (need more patterns)[/blue]")
+                return
+
+            table = Table(title="Suggested Constraint Rules", box=box.ROUNDED)
+            table.add_column("Rule", style="cyan", no_wrap=True)
+            table.add_column("Description", style="white", no_wrap=False)
+            table.add_column("Reason", style="yellow", no_wrap=False)
+            table.add_column("Severity", style="red")
+
+            for rule in constraints:
+                table.add_row(
+                    rule['rule'],
+                    rule['description'][:60] + ("..." if len(rule['description']) > 60 else ""),
+                    rule['reason'],
+                    rule['severity']
+                )
+
+            console.print(table)
+
+            # Show implementation example
+            if constraints:
+                console.print("\n[cyan]Example Implementation:[/cyan]")
+                top_rule = constraints[0]
+                console.print(f"[dim]Pattern:[/dim] {top_rule['pattern']}")
+                if 'eslint_rule' in top_rule:
+                    console.print(f"[dim]ESLint:[/dim] {top_rule['eslint_rule']}")
+
+        elif action == 'report':
+            # Generate and display full report
+            console.print("[cyan]Generating GUKS analytics report...[/cyan]\n")
+            report = self.guks_analytics.generate_report()
+            console.print(Markdown(report))
+
+        else:
+            console.print("[yellow]Usage: guks [stats|patterns|recurring|constraints|report][/yellow]")
+            console.print("[dim]  stats      - Show GUKS statistics[/dim]")
+            console.print("[dim]  patterns   - Show recurring bug patterns[/dim]")
+            console.print("[dim]  constraints - Show suggested linting rules[/dim]")
+            console.print("[dim]  report     - Generate full analytics report[/dim]")
+
     def show_knowledge(self, subcommand: str):
         """Display universal knowledge stats, patterns, or search results."""
         if not self.knowledge:
@@ -1893,6 +2137,7 @@ Generate the complete corrected code following the plan above."""
         help_table.add_row("new <template> <file>", "Create file from template", "new python script.py")
         help_table.add_row("templates", "List available templates", "templates")
         help_table.add_row("image <file> [prompt]", "Analyze image with vision AI", "image screenshot.png")
+        help_table.add_row("guks [subcommand]", "GUKS analytics and insights", "guks stats")
         help_table.add_row("knowledge", "Query universal knowledge", "knowledge stats")
         help_table.add_row("undo", "Undo last edit", "undo")
         help_table.add_row("redo", "Redo last undone edit", "redo")
@@ -1922,15 +2167,14 @@ Generate the complete corrected code following the plan above."""
         """
         console.print(Panel.fit(
             "[bold cyan]🌊 GrokFlow v2 - Professional Mode[/bold cyan]\n"
-            "[white]Context-aware • Git-native • Action-first[/white]\n\n"
+            "[white]Context-aware • Git-native • Action-first • GUKS-powered[/white]\n\n"
             "[yellow]Quick commands:[/yellow]\n"
-            "  [cyan]fix[/cyan] - Smart fix\n"
+            "  [cyan]fix[/cyan] - Smart fix (with GUKS suggestions)\n"
             "  [cyan]test[/cyan] - Quick test\n"
             "  [cyan]commit[/cyan] - Smart commit\n"
+            "  [cyan]guks[/cyan] - GUKS analytics (stats/patterns/recurring/report)\n"
             "  [cyan]status[/cyan] - Show context\n"
-            "  [cyan]knowledge[/cyan] - Universal knowledge stats/search\n"
             "  [cyan]undo[/cyan] / [cyan]redo[/cyan] - Undo/redo edits\n"
-            "  [cyan]history[/cyan] - Show undo/redo history\n"
             "  [cyan]exit[/cyan] - Quit\n\n"
             "[dim]💡 Use Tab for completion, ↑↓ for history[/dim]",
             border_style="cyan"
@@ -1974,6 +2218,10 @@ Generate the complete corrected code following the plan above."""
                         self.analyze_image(image_path, prompt)
                     else:
                         console.print("[yellow]Usage: image <file> [prompt][/yellow]")
+                elif cmd.startswith('guks'):
+                    parts = cmd.split(maxsplit=1)
+                    sub = parts[1] if len(parts) > 1 else ''
+                    self.show_guks(sub)
                 elif cmd.startswith('knowledge'):
                     parts = cmd.split(maxsplit=1)
                     sub = parts[1] if len(parts) > 1 else ''
@@ -2045,7 +2293,7 @@ Examples:
     )
     
     parser.add_argument('command', nargs='?', default='interactive',
-                       choices=['interactive', 'fix', 'test', 'commit', 'status', 'knowledge', 'undo', 'redo', 'history', 'add', 'context', 'new', 'templates', 'image'])
+                       choices=['interactive', 'fix', 'test', 'commit', 'status', 'guks', 'knowledge', 'undo', 'redo', 'history', 'add', 'context', 'new', 'templates', 'image'])
     parser.add_argument('args', nargs='*', help='Command arguments')
     
     args = parser.parse_args()
@@ -2064,6 +2312,9 @@ Examples:
         grok.quick_commit(' '.join(args.args) if args.args else None)
     elif args.command == 'status':
         grok.show_context()
+    elif args.command == 'guks':
+        sub = ' '.join(args.args) if args.args else ''
+        grok.show_guks(sub)
     elif args.command == 'knowledge':
         sub = ' '.join(args.args) if args.args else ''
         grok.show_knowledge(sub)
