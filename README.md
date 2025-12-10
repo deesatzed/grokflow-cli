@@ -112,6 +112,7 @@ Start interactive mode:
 ```
 
 Available commands:
+- `architect` - Generate architectural plan (app blueprints)
 - `fix` - Fix errors in code
 - `test` - Run relevant tests
 - `commit` - Create smart commit
@@ -246,7 +247,66 @@ Enter filename: api.py
 ✅ Saved to api.py
 ```
 
-### Example 3: Understand GUKS Stats
+### Example 3: Generate Architectural Plan
+
+**Task**: Plan a new application
+
+**Run**:
+```bash
+./grokflow_v2.py architect "Build a REST API for inventory management with:
+- CRUD operations for products
+- PostgreSQL database
+- User authentication with JWT
+- Search and filtering
+- Docker deployment"
+```
+
+**Output**:
+```
+🏗️  Generating comprehensive architectural plan...
+This may take 30-60 seconds for detailed analysis...
+
+================================================================================
+
+┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 🏗️  Architectural Plan ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃                                                                                        ┃
+┃  # Summary Integration                                                                 ┃
+┃                                                                                        ┃
+┃  Building a REST API for inventory management with PostgreSQL...                      ┃
+┃                                                                                        ┃
+┃  # 1. Comprehensive Build Roadmap                                                      ┃
+┃                                                                                        ┃
+┃  | Phase | Objective | Inputs | Outputs | Risks/Unknowns |                           ┃
+┃  |-------|-----------|--------|---------|----------------|                           ┃
+┃  | 1     | Database Schema | Requirements | Schema DDL | Performance at scale |      ┃
+┃  | 2     | API Endpoints | Schema | REST API | Auth complexity |                     ┃
+┃  | 3     | Authentication | Security reqs | JWT system | Token management |          ┃
+┃  ...                                                                                   ┃
+┃                                                                                        ┃
+┃  # 2. Step-by-Step Implementation Plan                                                 ┃
+┃  # 3. Testing & Validation Plan                                                        ┃
+┃  # 4. Scope Guardrails                                                                 ┃
+┃  # 5. Expected Outcomes                                                                ┃
+┃  # 6. UX Bible                                                                         ┃
+┃                                                                                        ┃
+┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+
+================================================================================
+
+💾 Save architectural plan to file? (Y/n): y
+Filename [ARCHITECTURE.md]:
+✅ Plan saved to ARCHITECTURE.md
+```
+
+The `architect` command uses a professional architecture prompt that generates:
+- Phased build roadmap (no unrealistic timelines)
+- Step-by-step implementation plan with risks
+- Testing & validation strategy
+- Drift protection guardrails
+- UX-driven design principles
+- Realistic outcome scenarios
+
+### Example 4: Understand GUKS Stats
 
 ```bash
 ./grokflow_v2.py guks stats

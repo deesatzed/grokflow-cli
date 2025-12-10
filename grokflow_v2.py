@@ -264,7 +264,7 @@ class GrokFlowV2:
         """Setup enhanced prompt session with completion and history"""
         # Command completer
         commands = WordCompleter(
-            ['fix', 'test', 'commit', 'status', 'context', 'add', 'new', 'templates', 'image', 'guks', 'guks stats', 'guks patterns', 'guks recurring', 'guks report', 'knowledge', 'undo', 'redo', 'history', 'reasoning', 'reasoning on', 'reasoning off', 'perf', 'exit', 'help'],
+            ['architect', 'plan', 'fix', 'test', 'commit', 'status', 'context', 'add', 'new', 'templates', 'image', 'guks', 'guks stats', 'guks patterns', 'guks recurring', 'guks report', 'knowledge', 'undo', 'redo', 'history', 'reasoning', 'reasoning on', 'reasoning off', 'perf', 'exit', 'help'],
             ignore_case=True,
             sentence=True
         )
@@ -1935,7 +1935,102 @@ Generate the complete corrected code following the plan above."""
             console.print(f"[dim]⚡ Using grok-4-fast for optimized speed and cost[/dim]")
         else:
             console.print(f"\n[dim]Architecture: Single model ({self.PLANNER_MODEL})[/dim]")
-    
+
+    def architect_plan(self, user_input: Optional[str] = None):
+        """
+        Generate comprehensive architectural plan using architect.md prompt
+
+        Args:
+            user_input: Optional app idea. If None, prompt for multi-line input.
+        """
+        # Load architect prompt template
+        architect_prompt_path = Path.home() / ".claude" / "commands" / "architect.md"
+
+        if not architect_prompt_path.exists():
+            console.print(
+                f"[yellow]⚠️  Architect prompt not found at:[/yellow]\n"
+                f"[dim]{architect_prompt_path}[/dim]\n\n"
+                f"[cyan]This command requires the architect.md prompt file.[/cyan]"
+            )
+            return
+
+        try:
+            architect_prompt = architect_prompt_path.read_text()
+        except Exception as e:
+            logger.error(f"Failed to read architect prompt: {e}")
+            console.print(f"[red]❌ Failed to read architect prompt: {e}[/red]")
+            return
+
+        # Get user input if not provided
+        if not user_input:
+            console.print(
+                "\n[cyan]📝 Describe your app idea:[/cyan]\n"
+                "[dim]Enter your application description. Press Ctrl+D (Unix) or Ctrl+Z (Windows) when done.[/dim]\n"
+            )
+            lines = []
+            try:
+                while True:
+                    line = input()
+                    lines.append(line)
+            except EOFError:
+                pass
+
+            user_input = "\n".join(lines)
+
+        if not user_input or not user_input.strip():
+            console.print("[yellow]No input provided. Cancelling.[/yellow]")
+            return
+
+        # Call AI with architect prompt
+        console.print("\n[cyan]🏗️  Generating comprehensive architectural plan...[/cyan]")
+        console.print("[dim]This may take 30-60 seconds for detailed analysis...[/dim]\n")
+
+        if not self.client:
+            console.print("[red]❌ OpenAI client not initialized. Set XAI_API_KEY.[/red]")
+            return
+
+        try:
+            response = self.client.chat.completions.create(
+                model="grok-beta",  # Use grok-beta for complex architectural reasoning
+                messages=[
+                    {"role": "system", "content": architect_prompt},
+                    {"role": "user", "content": f"Generate a comprehensive architectural plan for this application idea:\n\n{user_input}"}
+                ],
+                temperature=0.7,
+                max_tokens=8000  # Long structured responses expected
+            )
+
+            plan = response.choices[0].message.content
+
+            # Display plan with rich formatting
+            console.print("\n" + "="*80 + "\n")
+            console.print(Panel(
+                Markdown(plan),
+                title="[bold cyan]🏗️  Architectural Plan[/bold cyan]",
+                border_style="cyan",
+                padding=(1, 2)
+            ))
+            console.print("\n" + "="*80 + "\n")
+
+            # Offer to save to file
+            if Confirm.ask("\n💾 Save architectural plan to file?", default=True):
+                filename = Prompt.ask("Filename", default="ARCHITECTURE.md")
+
+                try:
+                    Path(filename).write_text(plan)
+                    console.print(f"[green]✅ Plan saved to {filename}[/green]")
+
+                    # Log for undo system (optional, if you want undo support)
+                    logger.info(f"Architectural plan saved to {filename}")
+
+                except Exception as e:
+                    logger.error(f"Failed to save plan: {e}")
+                    console.print(f"[red]❌ Failed to save: {e}[/red]")
+
+        except Exception as e:
+            logger.error(f"Architect plan generation failed: {e}")
+            console.print(f"[red]❌ Failed to generate plan: {e}[/red]")
+
     def show_guks(self, subcommand: str):
         """Display GUKS stats, patterns, or analytics"""
         if not self.guks or not self.guks_analytics:
@@ -2169,6 +2264,7 @@ Generate the complete corrected code following the plan above."""
             "[bold cyan]🌊 GrokFlow v2 - Professional Mode[/bold cyan]\n"
             "[white]Context-aware • Git-native • Action-first • GUKS-powered[/white]\n\n"
             "[yellow]Quick commands:[/yellow]\n"
+            "  [cyan]architect[/cyan] - Generate architectural plan (app blueprints)\n"
             "  [cyan]fix[/cyan] - Smart fix (with GUKS suggestions)\n"
             "  [cyan]test[/cyan] - Quick test\n"
             "  [cyan]commit[/cyan] - Smart commit\n"
@@ -2252,10 +2348,15 @@ Generate the complete corrected code following the plan above."""
                     self.toggle_reasoning('on')
                 elif cmd == 'reasoning off':
                     self.toggle_reasoning('off')
+                elif cmd == 'architect' or cmd == 'plan':
+                    self.architect_plan()
+                elif cmd.startswith('architect ') or cmd.startswith('plan '):
+                    input_text = cmd.split(maxsplit=1)[1]
+                    self.architect_plan(input_text)
                 elif cmd == 'help':
                     self._show_help()
                 else:
-                    console.print("[yellow]Unknown command. Try: fix, test, commit, status, undo, redo, history, reasoning, perf, help[/yellow]")
+                    console.print("[yellow]Unknown command. Try: architect, fix, test, commit, status, undo, redo, history, reasoning, perf, help[/yellow]")
             
             except KeyboardInterrupt:
                 console.print("\n[yellow]Use 'exit' to quit[/yellow]")
@@ -2278,6 +2379,8 @@ def main():
         epilog="""
 Quick Commands:
   grokflow                    Interactive mode (default)
+  grokflow architect          Generate architectural plan (multi-line input)
+  grokflow architect "idea"   Generate plan from inline description
   grokflow fix               Fix last error or modified file
   grokflow fix <file>        Fix specific file
   grokflow test              Run relevant tests
@@ -2286,6 +2389,7 @@ Quick Commands:
 
 Examples:
   grokflow                   # Start interactive mode
+  grokflow architect "Build a REST API for todo management with PostgreSQL"
   grokflow fix app.py        # Fix specific file
   grokflow test              # Run tests
   grokflow commit "feat: ..."  # Commit with message
@@ -2293,7 +2397,7 @@ Examples:
     )
     
     parser.add_argument('command', nargs='?', default='interactive',
-                       choices=['interactive', 'fix', 'test', 'commit', 'status', 'guks', 'knowledge', 'undo', 'redo', 'history', 'add', 'context', 'new', 'templates', 'image'])
+                       choices=['interactive', 'fix', 'test', 'commit', 'status', 'guks', 'knowledge', 'undo', 'redo', 'history', 'add', 'context', 'new', 'templates', 'image', 'architect', 'plan'])
     parser.add_argument('args', nargs='*', help='Command arguments')
     
     args = parser.parse_args()
@@ -2312,6 +2416,8 @@ Examples:
         grok.quick_commit(' '.join(args.args) if args.args else None)
     elif args.command == 'status':
         grok.show_context()
+    elif args.command == 'architect' or args.command == 'plan':
+        grok.architect_plan(' '.join(args.args) if args.args else None)
     elif args.command == 'guks':
         sub = ' '.join(args.args) if args.args else ''
         grok.show_guks(sub)
