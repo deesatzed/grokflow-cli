@@ -67,7 +67,7 @@ export class GUKSDiagnostics {
           };
 
           // Store patterns in diagnostic for quick fix provider
-          (guksDiag as any).guks Patterns = result.patterns;
+          (guksDiag as any).guksPatterns = result.patterns;
 
           guksDiagnostics.push(guksDiag);
         }

@@ -29,7 +29,7 @@ export class GUKSCodeActions implements vscode.CodeActionProvider {
 
     for (const diag of guksDiagnostics) {
       // Extract patterns from diagnostic
-      const patterns: GUKSPattern[] = (diag as any).guks Patterns || [];
+      const patterns: GUKSPattern[] = (diag as any).guksPatterns || [];
 
       // Create code action for each pattern
       for (const pattern of patterns) {
