@@ -1,0 +1,124 @@
+{
+  "name": "vscode-guks",
+  "displayName": "GUKS - Cross-Project Learning",
+  "description": "AI coding assistant that learns from your team's bug history",
+  "version": "0.1.0",
+  "publisher": "grokflow",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/deesatzed/grokflow-cli"
+  },
+  "engines": {
+    "vscode": "^1.80.0"
+  },
+  "categories": [
+    "Linters",
+    "Other"
+  ],
+  "keywords": [
+    "guks",
+    "grokflow",
+    "ai",
+    "bug-fixing",
+    "learning",
+    "cross-project",
+    "semantic-search"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "configuration": {
+      "title": "GUKS",
+      "properties": {
+        "guks.apiUrl": {
+          "type": "string",
+          "default": "http://127.0.0.1:8765",
+          "description": "GUKS API server URL"
+        },
+        "guks.enableDiagnostics": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable GUKS diagnostic suggestions"
+        },
+        "guks.enableHover": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable GUKS hover tooltips"
+        },
+        "guks.minSimilarity": {
+          "type": "number",
+          "default": 0.7,
+          "minimum": 0.0,
+          "maximum": 1.0,
+          "description": "Minimum similarity threshold for suggestions (0.0-1.0)"
+        },
+        "guks.debounceMs": {
+          "type": "number",
+          "default": 500,
+          "minimum": 100,
+          "maximum": 5000,
+          "description": "Debounce time in milliseconds for proactive suggestions"
+        },
+        "guks.showStatusBar": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show GUKS status in status bar"
+        }
+      }
+    },
+    "commands": [
+      {
+        "command": "guks.showStats",
+        "title": "GUKS: Show Statistics"
+      },
+      {
+        "command": "guks.showPatterns",
+        "title": "GUKS: Show Recurring Patterns"
+      },
+      {
+        "command": "guks.showConstraints",
+        "title": "GUKS: Show Suggested Linting Rules"
+      },
+      {
+        "command": "guks.applyFix",
+        "title": "GUKS: Apply Fix"
+      },
+      {
+        "command": "guks.startServer",
+        "title": "GUKS: Start API Server"
+      },
+      {
+        "command": "guks.recordFix",
+        "title": "GUKS: Record This Fix"
+      },
+      {
+        "command": "guks.refreshPatterns",
+        "title": "GUKS: Refresh Patterns"
+      }
+    ]
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "pretest": "npm run compile",
+    "test": "node ./out/test/runTest.js",
+    "lint": "eslint src --ext ts"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.80.0",
+    "@types/node": "^18.0.0",
+    "@types/mocha": "^10.0.0",
+    "@typescript-eslint/eslint-plugin": "^6.0.0",
+    "@typescript-eslint/parser": "^6.0.0",
+    "eslint": "^8.50.0",
+    "typescript": "^5.2.0",
+    "@vscode/test-electron": "^2.3.0",
+    "mocha": "^10.2.0"
+  },
+  "dependencies": {
+    "axios": "^1.6.0"
+  }
+}
